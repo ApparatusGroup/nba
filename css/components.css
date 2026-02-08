@@ -399,3 +399,15 @@
 .tooltip:hover::after {
     opacity: 1;
 }
+
+/* ============ RESPONSIVE COMPONENTS ============ */
+@media (max-width: 768px) {
+    .card { padding: var(--space-md); }
+    .modal { width: 95%; max-height: 85vh; border-radius: var(--radius-lg); }
+    .modal-header { padding: var(--space-md); }
+    .modal-body { padding: var(--space-md); }
+    .toast { max-width: 90vw; }
+    #toast-container { right: var(--space-sm); left: var(--space-sm); top: var(--space-sm); }
+    .stat-box { padding: var(--space-sm); }
+    .stat-box .stat-value { font-size: var(--font-lg); }
+}

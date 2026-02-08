@@ -132,6 +132,25 @@
     padding: var(--space-xl);
     max-width: 1400px;
     width: 100%;
+    overflow-x: hidden;
+}
+
+/* Mobile hamburger button (hidden on desktop) */
+.menu-toggle {
+    display: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: var(--space-xs);
+    color: var(--text-primary);
+}
+
+/* Sidebar overlay for mobile */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 99;
 }
 
 .hidden {
@@ -180,3 +199,71 @@
 .mb-sm { margin-bottom: var(--space-sm); }
 .mb-md { margin-bottom: var(--space-md); }
 .mb-lg { margin-bottom: var(--space-lg); }
+
+/* ============ TABLET (max 1024px) ============ */
+@media (max-width: 1024px) {
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ============ MOBILE (max 768px) ============ */
+@media (max-width: 768px) {
+    :root {
+        --sidebar-width: 260px;
+    }
+
+    .menu-toggle {
+        display: block;
+    }
+
+    .sidebar-overlay.active {
+        display: block;
+    }
+
+    #sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        width: var(--sidebar-width);
+    }
+
+    #sidebar.open {
+        transform: translateX(0);
+    }
+
+    #app-main {
+        margin-left: 0;
+    }
+
+    #navbar {
+        padding: 0 var(--space-md);
+    }
+
+    #main-content {
+        padding: var(--space-md);
+    }
+
+    .grid-2, .grid-3, .grid-4 {
+        grid-template-columns: 1fr;
+    }
+
+    .flex-between {
+        flex-wrap: wrap;
+        gap: var(--space-sm);
+    }
+}
+
+/* ============ SMALL PHONE (max 480px) ============ */
+@media (max-width: 480px) {
+    #main-content {
+        padding: var(--space-sm);
+    }
+
+    #navbar {
+        padding: 0 var(--space-sm);
+    }
+
+    .btn-lg {
+        padding: var(--space-sm) var(--space-lg);
+        font-size: var(--font-sm);
+    }
+}

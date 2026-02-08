@@ -59,7 +59,13 @@ export function renderSidebar() {
             const navItem = el('div', {
                 className: 'nav-item',
                 dataset: { route: item.route },
-                onclick: () => navigate(item.route)
+                onclick: () => {
+                    navigate(item.route);
+                    // Close sidebar on mobile
+                    sidebar.classList.remove('open');
+                    const overlay = document.querySelector('.sidebar-overlay');
+                    if (overlay) overlay.classList.remove('active');
+                }
             });
             navItem.appendChild(el('span', { className: 'nav-icon' }, item.icon));
             navItem.appendChild(el('span', {}, item.label));

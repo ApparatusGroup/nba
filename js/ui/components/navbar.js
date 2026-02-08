@@ -13,8 +13,22 @@ export function renderNavbar(title = '') {
     navbar.innerHTML = '';
     const state = getState();
 
-    // Title
-    navbar.appendChild(el('div', { className: 'nav-title' }, title || getPhaseTitle(state)));
+    // Left side: hamburger + title
+    const leftSide = el('div', { style: { display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' } });
+
+    // Hamburger menu (visible on mobile via CSS .menu-toggle)
+    leftSide.appendChild(el('button', {
+        className: 'menu-toggle',
+        onclick: () => {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.querySelector('.sidebar-overlay');
+            if (sidebar) sidebar.classList.toggle('open');
+            if (overlay) overlay.classList.toggle('active');
+        }
+    }, '\u2630'));
+
+    leftSide.appendChild(el('div', { className: 'nav-title' }, title || getPhaseTitle(state)));
+    navbar.appendChild(leftSide);
 
     // Actions
     const actions = el('div', { className: 'nav-actions' });

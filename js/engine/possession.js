@@ -17,7 +17,7 @@ function ratingToPct(rating, shotType) {
     } else if (shotType === 'mid') {
         return 0.32 + (rating / 99) * 0.22; // 32% to 54%
     } else if (shotType === 'inside') {
-        return 0.42 + (rating / 99) * 0.28; // 42% to 70%
+        return 0.44 + (rating / 99) * 0.28; // 44% to 72%
     } else if (shotType === 'ft') {
         return 0.55 + (rating / 99) * 0.35; // 55% to 90%
     }
@@ -127,11 +127,11 @@ export function resolvePossession(offLineup, defLineup, context = {}) {
     const fatigueMod = context.fatigue || 0; // 0 to -0.1
     const homeBonus = context.isHome ? 0.015 : 0;
 
-    // Check for turnover (average ~14 turnovers per game per team, ~100 possessions = 14%)
+    // Turnover check (~13-14 turnovers per game / ~100 possessions = ~13%)
     const avgDefense = defLineup.reduce((s, p) => s + p.ratings.defense, 0) / defLineup.length;
-    const turnoverChance = 0.10 + (avgDefense / 99) * 0.08 - (ballHandler.ratings.passing / 99) * 0.06 + fatigueMod * 0.5;
+    const turnoverChance = 0.08 + (avgDefense / 99) * 0.07 - (ballHandler.ratings.passing / 99) * 0.05 + fatigueMod * 0.3;
 
-    if (Math.random() < clamp(turnoverChance, 0.06, 0.22)) {
+    if (Math.random() < clamp(turnoverChance, 0.07, 0.18)) {
         result.turnover = true;
         result.stats[ballHandler.id].to = 1;
 
@@ -159,11 +159,11 @@ export function resolvePossession(offLineup, defLineup, context = {}) {
     // Select defender
     const defender = selectDefender(defLineup, shooter);
 
-    // Check for foul before shot (~20% of possessions have fouls, ~60% are shooting fouls)
-    const foulChance = 0.18;
+    // Check for foul before shot (~15% of possessions have fouls, ~72% are shooting fouls)
+    const foulChance = 0.15;
     const isFoul = Math.random() < foulChance;
 
-    if (isFoul && Math.random() < 0.6) {
+    if (isFoul && Math.random() < 0.72) {
         // Shooting foul
         result.foul = true;
         result.stats[defender.id].pf = 1;
@@ -197,8 +197,8 @@ export function resolvePossession(offLineup, defLineup, context = {}) {
     if (isFoul) {
         result.foul = true;
         result.stats[defender.id].pf = 1;
-        // Bonus free throws if in penalty (simplified: 25% chance)
-        if (Math.random() < 0.25) {
+        // Bonus free throws if in penalty (simplified: 45% chance)
+        if (Math.random() < 0.45) {
             const ftPct = ratingToPct(shooter.ratings.offense * 0.4 + shooter.ratings.midRange * 0.6, 'ft');
             result.freeThrows.shooter = shooter;
             result.freeThrows.attempted = 2;
@@ -236,7 +236,7 @@ export function resolvePossession(offLineup, defLineup, context = {}) {
 
     // Calculate shot probability
     const basePct = ratingToPct(shooterRating, shotType === 'three' ? 'three' : shotType === 'mid' ? 'mid' : 'inside');
-    const contestMod = -0.05 * (defender.ratings.defense / 99);
+    const contestMod = -0.04 * (defender.ratings.defense / 99);
     const fatMod = fatigueMod * 0.8;
     const finalPct = clamp(basePct + contestMod + fatMod + homeBonus, 0.15, 0.72);
 

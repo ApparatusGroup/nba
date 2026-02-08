@@ -103,7 +103,7 @@ function simulateQuarter(quarter, totalSeconds, homeLineup, awayLineup, homeRot,
     let subCounter = 0;
 
     // Target ~100 possessions per team per 48 min -> ~25 per quarter per team
-    const possessionDuration = 14 + randInt(0, 12); // avg ~20 seconds
+    // 720s per quarter / ~50 total possessions = ~14.4s avg per possession
 
     while (clock > 0) {
         const isHome = possession === 'home';
@@ -153,15 +153,15 @@ function simulateQuarter(quarter, totalSeconds, homeLineup, awayLineup, homeRot,
             }
         }
 
-        // Advance clock
-        const elapsed = 14 + randInt(0, 12);
+        // Advance clock (~10-18s per possession, avg ~14s)
+        const elapsed = 10 + randInt(0, 8);
         clock -= elapsed;
 
         // Track minutes and fatigue
         [...offLineup, ...defLineup].forEach(p => {
             if (homeBox.players[p.id]) homeBox.players[p.id].min += elapsed / 60;
             else if (awayBox.players[p.id]) awayBox.players[p.id].min += elapsed / 60;
-            fatigue[p.id] = clamp((fatigue[p.id] || 0) + elapsed / 600, 0, 1);
+            fatigue[p.id] = clamp((fatigue[p.id] || 0) + elapsed / 720, 0, 1);
         });
 
         // Substitutions every ~3 minutes of game time

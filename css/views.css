@@ -682,3 +682,75 @@
     background: var(--success-light);
     border-color: var(--success);
 }
+
+/* ============ RESPONSIVE VIEWS ============ */
+
+@media (max-width: 1024px) {
+    .standings-container { grid-template-columns: 1fr; }
+    .trade-panels { grid-template-columns: 1fr; }
+    .trade-arrow { padding-top: 0; justify-content: center; transform: rotate(90deg); }
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .fa-market { grid-template-columns: 1fr; }
+    .draft-board { grid-template-columns: 1fr; }
+    .ratings-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 768px) {
+    .team-grid { grid-template-columns: repeat(3, 1fr); gap: var(--space-sm); }
+    .team-select-card { padding: var(--space-md); }
+    .team-select-card .team-abbr { font-size: var(--font-lg); }
+    .team-select-screen h1 { font-size: var(--font-2xl); }
+
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .next-game-card { padding: var(--space-md); }
+    .next-game-card .matchup { gap: var(--space-md); }
+    .next-game-card .team-abbr-big { font-size: var(--font-2xl); }
+    .quick-actions { flex-direction: column; }
+    .quick-actions .btn { width: 100%; justify-content: center; }
+
+    .lineup-grid { grid-template-columns: repeat(3, 1fr); gap: var(--space-sm); }
+    .lineup-slot { min-height: 90px; padding: var(--space-sm); }
+    .lineup-slot .player-name { font-size: var(--font-sm); }
+
+    .roster-section, .box-score-team, .standings-container > div { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .data-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    .scoreboard { padding: var(--space-md); gap: var(--space-md); }
+    .scoreboard .team-abbr { font-size: var(--font-lg); }
+    .scoreboard .score { font-size: var(--font-2xl); }
+    .sim-controls { flex-direction: column; align-items: stretch; }
+    .sim-controls .btn { justify-content: center; }
+    .quarter-scores { flex-wrap: wrap; }
+    .play-by-play .play { font-size: 0.65rem; gap: var(--space-sm); }
+
+    .bracket { min-width: 600px; gap: var(--space-md); }
+    .bracket-round { min-width: 140px; }
+    .series-team { font-size: var(--font-xs); padding: var(--space-xs) var(--space-sm); }
+
+    .player-header { flex-direction: column; text-align: center; gap: var(--space-md); }
+    .player-bio .player-details { flex-wrap: wrap; justify-content: center; gap: var(--space-sm); }
+    .player-bio h1 { font-size: var(--font-xl); }
+    .player-avatar { width: 72px; height: 72px; font-size: var(--font-2xl); }
+    .ratings-grid { grid-template-columns: repeat(2, 1fr); gap: var(--space-sm); }
+    .rating-item { padding: var(--space-sm); }
+    .rating-item .rating-number { font-size: var(--font-lg); }
+
+    .prospect-ratings { grid-template-columns: repeat(2, 1fr); }
+    .fa-player { flex-direction: column; text-align: center; gap: var(--space-sm); }
+    .save-slots { grid-template-columns: 1fr; }
+
+    .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tab { padding: var(--space-xs) var(--space-md); font-size: var(--font-xs); flex-shrink: 0; }
+    .phase-steps { flex-wrap: wrap; gap: var(--space-md); }
+}
+
+@media (max-width: 480px) {
+    .team-grid { grid-template-columns: repeat(2, 1fr); }
+    .lineup-grid { grid-template-columns: repeat(2, 1fr); }
+    .stats-row { grid-template-columns: 1fr 1fr; gap: var(--space-sm); }
+    .stat-box .stat-value { font-size: var(--font-xl); }
+    .stat-box .stat-label { font-size: 0.6rem; }
+    .scoreboard { gap: var(--space-sm); padding: var(--space-sm); }
+    .scoreboard .team-abbr { font-size: var(--font-md); }
+    .scoreboard .score { font-size: var(--font-xl); }
+}
