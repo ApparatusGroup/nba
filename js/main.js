@@ -143,10 +143,5 @@ function init() {
     console.log(`Loaded ${ALL_PLAYERS.length} players across ${Object.keys(TEAMS).length} teams`);
 }
 
-// Start the app
-document.addEventListener('DOMContentLoaded', init);
-
-// Also try to init immediately if DOM is already ready
-if (document.readyState !== 'loading') {
-    init();
-}
+// Start the app - ES modules are deferred, so DOM is already parsed when this runs
+init();
