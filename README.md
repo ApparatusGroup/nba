@@ -27,3 +27,24 @@ python3 -m pytest -q
 
 - Default setup (`--games-per-matchup 2`) gives 58 regular-season games per team for faster simulation.
 - Use `--games-per-matchup 4` for a heavier run closer to a full schedule volume.
+
+
+## Web app
+
+Run locally:
+
+```bash
+python3 app.py
+```
+
+Open `http://localhost:8000`.
+
+### Vercel
+
+This repo now includes `vercel.json` for a Python serverless-style entrypoint.
+
+```bash
+vercel
+```
+
+> I cannot deploy to your Vercel account from this environment because it requires your account auth token/team/project access.
