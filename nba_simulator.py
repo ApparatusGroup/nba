@@ -112,7 +112,6 @@ def standings_by_conference(wins: Dict[str, int], losses: Dict[str, int], confer
 
 
 def simulate_series(high_seed: Team, low_seed: Team, rng: random.Random, best_of: int = 7) -> str:
-    """Simulate a playoff series with 2-2-1-1-1 home-court for the higher seed."""
     target = best_of // 2 + 1
     wins = {high_seed.name: 0, low_seed.name: 0}
     home_pattern = [high_seed, high_seed, low_seed, low_seed, high_seed, low_seed, high_seed]
@@ -129,7 +128,6 @@ def simulate_series(high_seed: Team, low_seed: Team, rng: random.Random, best_of
 
 
 def run_play_in(seeded_ten: Sequence[str], rng: random.Random) -> Tuple[str, str]:
-    """Return final #7 and #8 seeds from a 7-10 play-in."""
     seven, eight, nine, ten = [TEAM_BY_NAME[name] for name in seeded_ten[6:10]]
     winner_7_game, _, _ = simulate_game(seven, eight, rng)
     loser_7_game = eight if winner_7_game == seven.name else seven
@@ -149,31 +147,56 @@ def build_playoff_field(conference_seeds: Sequence[str], rng: random.Random) -> 
     return locked + [seed_7, seed_8]
 
 
-def simulate_playoffs(wins: Dict[str, int], losses: Dict[str, int], rng: random.Random) -> str:
+def simulate_playoffs_with_details(wins: Dict[str, int], losses: Dict[str, int], rng: random.Random) -> Dict[str, object]:
     east_ranked = standings_by_conference(wins, losses, "East")
     west_ranked = standings_by_conference(wins, losses, "West")
 
     east_seeded = build_playoff_field(east_ranked, rng)
     west_seeded = build_playoff_field(west_ranked, rng)
 
-    def run_bracket(seeded: Sequence[str]) -> str:
+    def run_bracket(seeded: Sequence[str], label: str) -> Tuple[str, Dict[str, List[Dict[str, str]]]]:
         qf_pairs = [(seeded[0], seeded[7]), (seeded[3], seeded[4]), (seeded[2], seeded[5]), (seeded[1], seeded[6])]
-        sf_teams = [simulate_series(TEAM_BY_NAME[a], TEAM_BY_NAME[b], rng) for a, b in qf_pairs]
+        qf_results = []
+        sf_teams = []
+        for a, b in qf_pairs:
+            winner = simulate_series(TEAM_BY_NAME[a], TEAM_BY_NAME[b], rng)
+            qf_results.append({"a": a, "b": b, "winner": winner})
+            sf_teams.append(winner)
 
-        semis = [
-            simulate_series(TEAM_BY_NAME[sf_teams[0]], TEAM_BY_NAME[sf_teams[1]], rng),
-            simulate_series(TEAM_BY_NAME[sf_teams[2]], TEAM_BY_NAME[sf_teams[3]], rng),
-        ]
-        return simulate_series(TEAM_BY_NAME[semis[0]], TEAM_BY_NAME[semis[1]], rng)
+        sf_pairs = [(sf_teams[0], sf_teams[1]), (sf_teams[2], sf_teams[3])]
+        sf_results = []
+        finals_teams = []
+        for a, b in sf_pairs:
+            winner = simulate_series(TEAM_BY_NAME[a], TEAM_BY_NAME[b], rng)
+            sf_results.append({"a": a, "b": b, "winner": winner})
+            finals_teams.append(winner)
 
-    east_champ = run_bracket(east_seeded)
-    west_champ = run_bracket(west_seeded)
+        conf_winner = simulate_series(TEAM_BY_NAME[finals_teams[0]], TEAM_BY_NAME[finals_teams[1]], rng)
+        cf = {"a": finals_teams[0], "b": finals_teams[1], "winner": conf_winner}
+        return conf_winner, {"conference": label, "qf": qf_results, "sf": sf_results, "cf": [cf]}
+
+    east_champ, east_detail = run_bracket(east_seeded, "East")
+    west_champ, west_detail = run_bracket(west_seeded, "West")
 
     east_team = TEAM_BY_NAME[east_champ]
     west_team = TEAM_BY_NAME[west_champ]
     high_seed = east_team if wins[east_champ] >= wins[west_champ] else west_team
     low_seed = west_team if high_seed.name == east_champ else east_team
-    return simulate_series(high_seed, low_seed, rng)
+    champion = simulate_series(high_seed, low_seed, rng)
+
+    finals = {"a": east_champ, "b": west_champ, "winner": champion}
+    return {
+        "champion": champion,
+        "east_seeded": east_seeded,
+        "west_seeded": west_seeded,
+        "east": east_detail,
+        "west": west_detail,
+        "finals": finals,
+    }
+
+
+def simulate_playoffs(wins: Dict[str, int], losses: Dict[str, int], rng: random.Random) -> str:
+    return str(simulate_playoffs_with_details(wins, losses, rng)["champion"])
 
 
 def print_standings(wins: Dict[str, int], losses: Dict[str, int]) -> None:

@@ -19,3 +19,5 @@ def test_api_simulate_works():
 
     assert "champion" in data
     assert len(data["wins"]) == 30
+    assert "playoff" in data
+    assert "finals" in data["playoff"]

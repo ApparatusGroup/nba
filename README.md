@@ -9,6 +9,7 @@ A lightweight but realistic NBA simulator that runs a full regular season, play-
 - Home-court advantage in single games and 2-2-1-1-1 playoff series modeling
 - 7-10 play-in tournament in each conference
 - Full 16-team playoff bracket and NBA Finals champion
+- Web UI with conference standings and interactive bracket output
 - Reproducible runs using `--seed`
 
 ## Quick start

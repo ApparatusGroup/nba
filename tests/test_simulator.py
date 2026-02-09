@@ -1,6 +1,12 @@
 import random
 
-from nba_simulator import TEAMS, build_playoff_field, make_schedule, simulate_regular_season
+from nba_simulator import (
+    TEAMS,
+    build_playoff_field,
+    make_schedule,
+    simulate_playoffs_with_details,
+    simulate_regular_season,
+)
 
 
 def test_team_count():
@@ -22,3 +28,10 @@ def test_playoff_field_has_eight_unique_teams():
     field = build_playoff_field(east, random.Random(123))
     assert len(field) == 8
     assert len(set(field)) == 8
+
+
+def test_playoff_details_include_finals_winner():
+    rng = random.Random(99)
+    wins, losses = simulate_regular_season(rng, games_per_matchup=1)
+    details = simulate_playoffs_with_details(wins, losses, random.Random(99))
+    assert details["champion"] in details["finals"].values()
