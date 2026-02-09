@@ -1,11 +1,16 @@
-# NBA MyLeague GM Simulator
+# NBA GM Universe (MyLeague-style)
 
-This is now a **2K-style MyLeague sim**:
+A significantly expanded NBA simulation sandbox inspired by 2K MyLeague.
 
-- Choose any NBA team as your franchise
-- Pick a GM strategy
-- Sim **day-by-day**, **week-by-week**, or **the entire season**
-- Continue the same league session and track standings + playoffs
+## What’s included
+
+- Real NBA teams and star-led player pools
+- Persistent league sessions (stateful sim)
+- Day-by-day, week-by-week, or full-season simulation
+- Trade engine (player-for-player)
+- Rotation control (set top-10 minute order)
+- Standings, season progression, and playoff champion simulation
+- Professional dark-theme web UI + JSON API
 
 ## Run
 
@@ -15,33 +20,16 @@ python3 app.py
 
 Open `http://localhost:8000`.
 
-## API
+## Key APIs
 
-Create league:
+- `GET /api/new_league?seed=42&gpm=2&team=Los%20Angeles%20Lakers`
+- `GET /api/simulate_day?sid=<SID>`
+- `GET /api/simulate_week?sid=<SID>`
+- `GET /api/simulate_season?sid=<SID>`
+- `GET /api/trade?sid=<SID>&from_team=...&to_team=...&send=PlayerA&receive=PlayerB`
+- `GET /api/rotation?sid=<SID>&team=...&players=Player1,Player2,...`
 
-```bash
-curl "http://localhost:8000/api/new_league?seed=42&gpm=2&team=Los%20Angeles%20Lakers&move=all_in"
-```
-
-Sim day:
-
-```bash
-curl "http://localhost:8000/api/simulate_day?sid=<SESSION_ID>"
-```
-
-Sim week:
-
-```bash
-curl "http://localhost:8000/api/simulate_week?sid=<SESSION_ID>"
-```
-
-Sim full season:
-
-```bash
-curl "http://localhost:8000/api/simulate_season?sid=<SESSION_ID>"
-```
-
-## Tests
+## Test
 
 ```bash
 python3 -m pytest -q
