@@ -1,34 +1,44 @@
-# NBA Simulator
+# NBA MyLeague GM Simulator
 
-A realistic NBA franchise simulator where the user can run any team as GM and simulate a full season + playoffs.
+This is now a **2K-style MyLeague sim**:
 
-## Features
+- Choose any NBA team as your franchise
+- Pick a GM strategy
+- Sim **day-by-day**, **week-by-week**, or **the entire season**
+- Continue the same league session and track standings + playoffs
 
-- 30 real NBA teams with roster generation anchored by real star players
-- User-controlled franchise mode (`team` + front-office `move`)
-- Regular season simulation with configurable schedule size
-- Play-in tournament and full playoff bracket
-- Web UI for standings, your roster, and playoff rounds
-- JSON API for integrating simulation data externally
-
-## Run web app
+## Run
 
 ```bash
 python3 app.py
 ```
 
-Open `http://localhost:8000` and choose your team + move.
+Open `http://localhost:8000`.
 
-## API example
+## API
+
+Create league:
 
 ```bash
-curl "http://localhost:8000/api/simulate?seed=42&gpm=2&team=Los%20Angeles%20Lakers&move=all_in"
+curl "http://localhost:8000/api/new_league?seed=42&gpm=2&team=Los%20Angeles%20Lakers&move=all_in"
 ```
 
-## CLI example
+Sim day:
 
 ```bash
-python3 nba_simulator.py --seed 42 --games-per-matchup 2 --gm-team "Los Angeles Lakers" --gm-move all_in
+curl "http://localhost:8000/api/simulate_day?sid=<SESSION_ID>"
+```
+
+Sim week:
+
+```bash
+curl "http://localhost:8000/api/simulate_week?sid=<SESSION_ID>"
+```
+
+Sim full season:
+
+```bash
+curl "http://localhost:8000/api/simulate_season?sid=<SESSION_ID>"
 ```
 
 ## Tests

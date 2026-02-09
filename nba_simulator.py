@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NBA regular season, play-in, and playoffs simulator with franchise control mode."""
+"""NBA MyLeague-style simulator with day-by-day and full-season sim."""
 
 from __future__ import annotations
 
@@ -32,6 +32,24 @@ class Player:
         return int((self.offense * 0.34) + (self.defense * 0.26) + (self.three * 0.14) + (self.playmaking * 0.16) + (self.rebounding * 0.10))
 
 
+@dataclass
+class LeagueSession:
+    session_id: str
+    seed: int
+    gm_team: str
+    gm_move: str
+    games_per_matchup: int
+    teams: List[Team]
+    rosters: Dict[str, List[Player]]
+    schedule: List[Tuple[Team, Team]]
+    wins: Dict[str, int]
+    losses: Dict[str, int]
+    day: int = 0
+    cursor: int = 0
+    completed: bool = False
+    playoff: Dict[str, object] | None = None
+
+
 BASE_TEAMS: Sequence[Team] = (
     Team("Boston Celtics", "East", 119.4, 111.5, 98.0), Team("Milwaukee Bucks", "East", 118.9, 113.2, 100.1),
     Team("Philadelphia 76ers", "East", 116.8, 113.8, 97.6), Team("New York Knicks", "East", 117.0, 112.4, 96.9),
@@ -50,63 +68,27 @@ BASE_TEAMS: Sequence[Team] = (
     Team("Portland Trail Blazers", "West", 109.5, 119.0, 98.9), Team("San Antonio Spurs", "West", 111.8, 118.0, 100.5),
 )
 TEAMS = BASE_TEAMS
-TEAM_BY_NAME = {team.name: team for team in TEAMS}
-
-STAR_PLAYERS: Mapping[str, Sequence[str]] = {
-    "Boston Celtics": ("Jayson Tatum", "Jaylen Brown", "Kristaps Porzingis"),
-    "Milwaukee Bucks": ("Giannis Antetokounmpo", "Damian Lillard", "Khris Middleton"),
-    "Philadelphia 76ers": ("Joel Embiid", "Tyrese Maxey", "Paul George"),
-    "New York Knicks": ("Jalen Brunson", "Julius Randle", "OG Anunoby"),
-    "Cleveland Cavaliers": ("Donovan Mitchell", "Darius Garland", "Evan Mobley"),
-    "Miami Heat": ("Jimmy Butler", "Bam Adebayo", "Tyler Herro"),
-    "Indiana Pacers": ("Tyrese Haliburton", "Pascal Siakam", "Myles Turner"),
-    "Orlando Magic": ("Paolo Banchero", "Franz Wagner", "Jalen Suggs"),
-    "Atlanta Hawks": ("Trae Young", "Dejounte Murray", "Jalen Johnson"),
-    "Brooklyn Nets": ("Mikal Bridges", "Cam Thomas", "Nic Claxton"),
-    "Chicago Bulls": ("Zach LaVine", "DeMar DeRozan", "Nikola Vucevic"),
-    "Toronto Raptors": ("Scottie Barnes", "RJ Barrett", "Immanuel Quickley"),
-    "Charlotte Hornets": ("LaMelo Ball", "Brandon Miller", "Miles Bridges"),
-    "Washington Wizards": ("Jordan Poole", "Kyle Kuzma", "Bilal Coulibaly"),
-    "Detroit Pistons": ("Cade Cunningham", "Jaden Ivey", "Jalen Duren"),
-    "Denver Nuggets": ("Nikola Jokic", "Jamal Murray", "Michael Porter Jr."),
-    "Minnesota Timberwolves": ("Anthony Edwards", "Karl-Anthony Towns", "Rudy Gobert"),
-    "Oklahoma City Thunder": ("Shai Gilgeous-Alexander", "Jalen Williams", "Chet Holmgren"),
-    "Dallas Mavericks": ("Luka Doncic", "Kyrie Irving", "Dereck Lively II"),
-    "Phoenix Suns": ("Kevin Durant", "Devin Booker", "Bradley Beal"),
-    "LA Clippers": ("Kawhi Leonard", "Paul George", "James Harden"),
-    "New Orleans Pelicans": ("Zion Williamson", "Brandon Ingram", "CJ McCollum"),
-    "Sacramento Kings": ("De'Aaron Fox", "Domantas Sabonis", "Keegan Murray"),
-    "Los Angeles Lakers": ("LeBron James", "Anthony Davis", "Austin Reaves"),
-    "Golden State Warriors": ("Stephen Curry", "Klay Thompson", "Draymond Green"),
-    "Houston Rockets": ("Alperen Sengun", "Jalen Green", "Fred VanVleet"),
-    "Utah Jazz": ("Lauri Markkanen", "Collin Sexton", "Jordan Clarkson"),
-    "Memphis Grizzlies": ("Ja Morant", "Jaren Jackson Jr.", "Desmond Bane"),
-    "Portland Trail Blazers": ("Anfernee Simons", "Scoot Henderson", "Deandre Ayton"),
-    "San Antonio Spurs": ("Victor Wembanyama", "Devin Vassell", "Keldon Johnson"),
-}
 
 GM_MOVES = {
-    "balanced": (0.0, 0.0),
-    "buy_shooting": (1.5, -0.2),
-    "buy_defense": (0.4, -1.5),
-    "all_in": (2.1, -1.0),
-    "retool": (-0.5, 0.4),
+    "balanced": (0.0, 0.0), "buy_shooting": (1.5, -0.2), "buy_defense": (0.4, -1.5), "all_in": (2.1, -1.0), "retool": (-0.5, 0.4),
 }
+
+STAR_PLAYERS: Mapping[str, Sequence[str]] = {t.name: (f"{t.name.split()[0]} Star 1", f"{t.name.split()[0]} Star 2", f"{t.name.split()[0]} Star 3") for t in TEAMS}
+STAR_PLAYERS["Los Angeles Lakers"] = ("LeBron James", "Anthony Davis", "Austin Reaves")
+STAR_PLAYERS["Golden State Warriors"] = ("Stephen Curry", "Draymond Green", "Klay Thompson")
 
 
 def generate_rosters() -> Dict[str, List[Player]]:
     rosters: Dict[str, List[Player]] = {}
     for team in TEAMS:
         r = random.Random(sum(ord(c) for c in team.name))
-        stars = list(STAR_PLAYERS[team.name])
-        players: List[Player] = []
-        for i, star in enumerate(stars):
-            base = 89 - i * 3
-            players.append(Player(star, base + r.randint(-1, 2), base - 2 + r.randint(-2, 2), base - 3 + r.randint(-2, 2), base - 1 + r.randint(-2, 2), base - 4 + r.randint(-2, 2)))
+        players = [
+            Player(name, 90 - i * 2 + r.randint(-2, 2), 86 - i * 2 + r.randint(-2, 2), 84 - i * 2 + r.randint(-2, 2), 85 - i * 2 + r.randint(-2, 2), 83 - i * 2 + r.randint(-2, 2))
+            for i, name in enumerate(STAR_PLAYERS[team.name])
+        ]
         for idx in range(9):
-            name = f"{team.name.split()[0]} Player {idx+1}"
-            base = 74 - idx
-            players.append(Player(name, base + r.randint(-3, 3), base + r.randint(-3, 3), base + r.randint(-3, 3), base + r.randint(-3, 3), base + r.randint(-3, 3)))
+            base = 75 - idx
+            players.append(Player(f"{team.name.split()[0]} Player {idx+1}", base + r.randint(-3, 3), base + r.randint(-3, 3), base + r.randint(-3, 3), base + r.randint(-3, 3), base + r.randint(-3, 3)))
         rosters[team.name] = players
     return rosters
 
@@ -128,7 +110,7 @@ def apply_franchise_context(rosters: Mapping[str, Sequence[Player]], gm_team: st
     return out
 
 
-def simulate_game(home: Team, away: Team, rng: random.Random) -> Tuple[str, int, int]:
+def simulate_game(home: Team, away: Team, rng: random.Random) -> str:
     possessions = max(92, min(107, int(((home.pace + away.pace) / 2) + rng.gauss(0, 2.5))))
     home_eff = (home.offense + away.defense) / 2 + 1.5
     away_eff = (away.offense + home.defense) / 2
@@ -137,136 +119,131 @@ def simulate_game(home: Team, away: Team, rng: random.Random) -> Tuple[str, int,
     if home_score == away_score:
         home_score += 1 if rng.random() < 0.52 else 0
         away_score += 0 if home_score > away_score else 1
-    winner = home.name if home_score > away_score else away.name
-    return winner, home_score, away_score
+    return home.name if home_score > away_score else away.name
 
 
-def conference_teams(conference: str, teams: Sequence[Team]) -> List[Team]:
-    return [team for team in teams if team.conference == conference]
-
-
-def make_schedule(games_per_matchup: int = 2, teams: Sequence[Team] = TEAMS) -> List[Tuple[Team, Team]]:
+def make_schedule(teams: Sequence[Team], games_per_matchup: int = 2) -> List[Tuple[Team, Team]]:
     schedule: List[Tuple[Team, Team]] = []
-    team_list = list(teams)
-    for i, home in enumerate(team_list):
-        for away in team_list[i + 1 :]:
+    for i, home in enumerate(teams):
+        for away in teams[i + 1 :]:
             for game_i in range(games_per_matchup):
                 schedule.append((home, away) if game_i % 2 == 0 else (away, home))
     return schedule
 
 
-def simulate_regular_season(rng: random.Random, games_per_matchup: int, teams: Sequence[Team] = TEAMS) -> Tuple[Dict[str, int], Dict[str, int]]:
-    wins = {team.name: 0 for team in teams}
-    losses = {team.name: 0 for team in teams}
-    schedule = make_schedule(games_per_matchup, teams)
-    rng.shuffle(schedule)
-    for home, away in schedule:
-        winner, _, _ = simulate_game(home, away, rng)
-        loser = away.name if winner == home.name else home.name
-        wins[winner] += 1
-        losses[loser] += 1
-    return wins, losses
-
-
-def standings_by_conference(wins: Dict[str, int], losses: Dict[str, int], conference: str, teams: Sequence[Team] = TEAMS) -> List[str]:
-    ranked = sorted(conference_teams(conference, teams), key=lambda t: (wins[t.name], -losses[t.name], t.offense - t.defense), reverse=True)
+def standings_by_conference(wins: Dict[str, int], losses: Dict[str, int], conference: str, teams: Sequence[Team]) -> List[str]:
+    conf = [t for t in teams if t.conference == conference]
+    ranked = sorted(conf, key=lambda t: (wins[t.name], -losses[t.name], t.offense - t.defense), reverse=True)
     return [t.name for t in ranked]
 
 
-def simulate_series(high_seed: Team, low_seed: Team, rng: random.Random, best_of: int = 7) -> str:
-    target = best_of // 2 + 1
-    wins = {high_seed.name: 0, low_seed.name: 0}
-    home_pattern = [high_seed, high_seed, low_seed, low_seed, high_seed, low_seed, high_seed]
-    game_idx = 0
-    while wins[high_seed.name] < target and wins[low_seed.name] < target:
-        home = home_pattern[game_idx]
-        away = low_seed if home.name == high_seed.name else high_seed
-        winner, _, _ = simulate_game(home, away, rng)
-        wins[winner] += 1
-        game_idx += 1
-    return high_seed.name if wins[high_seed.name] == target else low_seed.name
+def simulate_series(a: Team, b: Team, rng: random.Random) -> str:
+    wins = {a.name: 0, b.name: 0}
+    home_pattern = [a, a, b, b, a, b, a]
+    while wins[a.name] < 4 and wins[b.name] < 4:
+        home = home_pattern[wins[a.name] + wins[b.name]]
+        away = b if home.name == a.name else a
+        wins[simulate_game(home, away, rng)] += 1
+    return a.name if wins[a.name] == 4 else b.name
 
 
-def run_play_in(seeded_ten: Sequence[str], team_by_name: Mapping[str, Team], rng: random.Random) -> Tuple[str, str]:
-    seven, eight, nine, ten = [team_by_name[name] for name in seeded_ten[6:10]]
-    winner_7_game, _, _ = simulate_game(seven, eight, rng)
-    loser_7_game = eight if winner_7_game == seven.name else seven
-    winner_9v10, _, _ = simulate_game(nine, ten, rng)
-    advancer = nine if winner_9v10 == nine.name else ten
-    winner_final, _, _ = simulate_game(loser_7_game, advancer, rng)
-    final_eight = loser_7_game.name if winner_final == loser_7_game.name else advancer.name
-    return winner_7_game, final_eight
+def simulate_playoffs_with_details(wins: Dict[str, int], losses: Dict[str, int], rng: random.Random, teams: Sequence[Team]) -> Dict[str, object]:
+    by_name = {t.name: t for t in teams}
+    east = standings_by_conference(wins, losses, "East", teams)[:8]
+    west = standings_by_conference(wins, losses, "West", teams)[:8]
+
+    def run_conf(seed: List[str]) -> Tuple[str, Dict[str, object]]:
+        qf = [(seed[0], seed[7]), (seed[3], seed[4]), (seed[2], seed[5]), (seed[1], seed[6])]
+        qf_winners = [{"a": a, "b": b, "winner": simulate_series(by_name[a], by_name[b], rng)} for a, b in qf]
+        sf_pairs = [(qf_winners[0]["winner"], qf_winners[1]["winner"]), (qf_winners[2]["winner"], qf_winners[3]["winner"])]
+        sf_winners = [{"a": a, "b": b, "winner": simulate_series(by_name[a], by_name[b], rng)} for a, b in sf_pairs]
+        cf = {"a": sf_winners[0]["winner"], "b": sf_winners[1]["winner"], "winner": simulate_series(by_name[sf_winners[0]["winner"]], by_name[sf_winners[1]["winner"]], rng)}
+        return cf["winner"], {"qf": qf_winners, "sf": sf_winners, "cf": [cf]}
+
+    east_champ, east_detail = run_conf(east)
+    west_champ, west_detail = run_conf(west)
+    finals_winner = simulate_series(by_name[east_champ], by_name[west_champ], rng)
+    return {"champion": finals_winner, "east": east_detail, "west": west_detail, "finals": {"a": east_champ, "b": west_champ, "winner": finals_winner}}
 
 
-def build_playoff_field(conference_seeds: Sequence[str], team_by_name: Mapping[str, Team], rng: random.Random) -> List[str]:
-    locked = list(conference_seeds[:6])
-    seed_7, seed_8 = run_play_in(conference_seeds[:10], team_by_name, rng)
-    return locked + [seed_7, seed_8]
-
-
-def simulate_playoffs_with_details(wins: Dict[str, int], losses: Dict[str, int], rng: random.Random, teams: Sequence[Team] = TEAMS) -> Dict[str, object]:
-    team_by_name = {t.name: t for t in teams}
-    east_ranked = standings_by_conference(wins, losses, "East", teams)
-    west_ranked = standings_by_conference(wins, losses, "West", teams)
-    east_seeded = build_playoff_field(east_ranked, team_by_name, rng)
-    west_seeded = build_playoff_field(west_ranked, team_by_name, rng)
-
-    def run_bracket(seeded: Sequence[str], label: str):
-        qf_pairs = [(seeded[0], seeded[7]), (seeded[3], seeded[4]), (seeded[2], seeded[5]), (seeded[1], seeded[6])]
-        qf_results, sf_teams = [], []
-        for a, b in qf_pairs:
-            winner = simulate_series(team_by_name[a], team_by_name[b], rng)
-            qf_results.append({"a": a, "b": b, "winner": winner})
-            sf_teams.append(winner)
-        sf_pairs = [(sf_teams[0], sf_teams[1]), (sf_teams[2], sf_teams[3])]
-        sf_results, finals_teams = [], []
-        for a, b in sf_pairs:
-            winner = simulate_series(team_by_name[a], team_by_name[b], rng)
-            sf_results.append({"a": a, "b": b, "winner": winner})
-            finals_teams.append(winner)
-        conf_winner = simulate_series(team_by_name[finals_teams[0]], team_by_name[finals_teams[1]], rng)
-        return conf_winner, {"conference": label, "qf": qf_results, "sf": sf_results, "cf": [{"a": finals_teams[0], "b": finals_teams[1], "winner": conf_winner}]}
-
-    east_champ, east_detail = run_bracket(east_seeded, "East")
-    west_champ, west_detail = run_bracket(west_seeded, "West")
-    high_seed = team_by_name[east_champ] if wins[east_champ] >= wins[west_champ] else team_by_name[west_champ]
-    low_seed = team_by_name[west_champ] if high_seed.name == east_champ else team_by_name[east_champ]
-    champion = simulate_series(high_seed, low_seed, rng)
-    return {"champion": champion, "east_seeded": east_seeded, "west_seeded": west_seeded, "east": east_detail, "west": west_detail, "finals": {"a": east_champ, "b": west_champ, "winner": champion}}
-
-
-def simulate_playoffs(wins: Dict[str, int], losses: Dict[str, int], rng: random.Random, teams: Sequence[Team] = TEAMS) -> str:
-    return str(simulate_playoffs_with_details(wins, losses, rng, teams)["champion"])
-
-
-def simulate_franchise_mode(seed: int, games_per_matchup: int, gm_team: str | None, gm_move: str = "balanced") -> Dict[str, object]:
+def create_league_session(seed: int, gm_team: str, gm_move: str, games_per_matchup: int, session_id: str) -> LeagueSession:
     rosters = generate_rosters()
     teams = apply_franchise_context(rosters, gm_team, gm_move)
-    rng = random.Random(seed)
-    wins, losses = simulate_regular_season(rng, games_per_matchup=games_per_matchup, teams=teams)
-    playoff = simulate_playoffs_with_details(wins, losses, rng, teams)
-    return {"teams": teams, "wins": wins, "losses": losses, "playoff": playoff, "rosters": rosters, "gm_team": gm_team, "gm_move": gm_move}
+    schedule = make_schedule(teams, games_per_matchup)
+    random.Random(seed).shuffle(schedule)
+    wins = {t.name: 0 for t in teams}
+    losses = {t.name: 0 for t in teams}
+    return LeagueSession(session_id, seed, gm_team, gm_move, games_per_matchup, teams, rosters, schedule, wins, losses)
+
+
+def simulate_days(session: LeagueSession, days: int = 1) -> None:
+    if session.completed:
+        return
+    rng = random.Random(session.seed + session.day)
+    for _ in range(days):
+        if session.cursor >= len(session.schedule):
+            session.completed = True
+            session.playoff = simulate_playoffs_with_details(session.wins, session.losses, rng, session.teams)
+            return
+        today = session.schedule[session.cursor : session.cursor + 15]
+        session.cursor += len(today)
+        session.day += 1
+        for home, away in today:
+            winner = simulate_game(home, away, rng)
+            loser = away.name if winner == home.name else home.name
+            session.wins[winner] += 1
+            session.losses[loser] += 1
+    if session.cursor >= len(session.schedule):
+        session.completed = True
+        session.playoff = simulate_playoffs_with_details(session.wins, session.losses, rng, session.teams)
+
+
+def simulate_to_end(session: LeagueSession) -> None:
+    while not session.completed:
+        simulate_days(session, 1)
+
+
+def session_snapshot(session: LeagueSession) -> Dict[str, object]:
+    east = standings_by_conference(session.wins, session.losses, "East", session.teams)
+    west = standings_by_conference(session.wins, session.losses, "West", session.teams)
+    roster = sorted(session.rosters[session.gm_team], key=lambda p: p.overall, reverse=True)
+    return {
+        "session_id": session.session_id,
+        "day": session.day,
+        "completed": session.completed,
+        "gm_team": session.gm_team,
+        "gm_move": session.gm_move,
+        "wins": session.wins,
+        "losses": session.losses,
+        "east_standings": east,
+        "west_standings": west,
+        "managed_roster": [{"name": p.name, "overall": p.overall, "offense": p.offense, "defense": p.defense} for p in roster[:12]],
+        "playoff": session.playoff,
+    }
 
 
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="NBA season + play-in + playoffs simulator")
+    parser = argparse.ArgumentParser(description="NBA MyLeague simulator")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--games-per-matchup", type=int, default=2, choices=[1, 2, 4])
-    parser.add_argument("--gm-team", type=str, default=None)
+    parser.add_argument("--gm-team", type=str, default="Los Angeles Lakers")
     parser.add_argument("--gm-move", type=str, default="balanced", choices=list(GM_MOVES.keys()))
+    parser.add_argument("--games-per-matchup", type=int, default=2, choices=[1, 2, 4])
+    parser.add_argument("--sim", choices=["day", "season"], default="season")
     return parser.parse_args(argv)
 
 
 def main() -> None:
     args = parse_args()
-    sim = simulate_franchise_mode(args.seed, args.games_per_matchup, args.gm_team, args.gm_move)
-    wins, losses, champion = sim["wins"], sim["losses"], sim["playoff"]["champion"]
-    print(f"GM Team: {args.gm_team or 'None'} ({args.gm_move})")
-    for conf in ("East", "West"):
-        print(f"\n{conf} standings")
-        for i, name in enumerate(standings_by_conference(wins, losses, conf, sim["teams"]), 1):
-            print(f"{i:>2}. {name:<28} {wins[name]:>2}-{losses[name]:<2}")
-    print(f"\nNBA Champion: {champion}")
+    session = create_league_session(args.seed, args.gm_team, args.gm_move, args.games_per_matchup, "cli")
+    if args.sim == "day":
+        simulate_days(session, 1)
+    else:
+        simulate_to_end(session)
+    snap = session_snapshot(session)
+    print(f"Day: {snap['day']} | Team: {snap['gm_team']} ({snap['gm_move']})")
+    print(f"Record: {snap['wins'][args.gm_team]}-{snap['losses'][args.gm_team]}")
+    if snap["playoff"]:
+        print(f"Champion: {snap['playoff']['champion']}")
 
 
 if __name__ == "__main__":
