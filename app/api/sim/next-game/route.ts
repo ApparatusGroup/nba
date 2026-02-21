@@ -113,17 +113,6 @@ function simulateQuickGame(game: QuickGame, ratings: Map<string, TeamRating>): Q
   };
 }
 
-async function runInBatches<T>(
-  items: T[],
-  batchSize: number,
-  operation: (item: T) => Promise<void>,
-): Promise<void> {
-  for (let index = 0; index < items.length; index += batchSize) {
-    const chunk = items.slice(index, index + batchSize);
-    await Promise.all(chunk.map((item) => operation(item)));
-  }
-}
-
 function getMoraleDelta(teamId: string, winnerTeamId: string, loserTeamId: string): number {
   if (teamId === winnerTeamId) {
     return 1;
@@ -210,6 +199,28 @@ async function persistFullGameResult(
         "turnovers" = "PlayerStats"."turnovers" + EXCLUDED."turnovers"
     `;
   }
+}
+
+async function persistQuickResults(quickResults: QuickResult[]): Promise<void> {
+  if (quickResults.length === 0) {
+    return;
+  }
+
+  const rows = quickResults.map((result) =>
+    Prisma.sql`(${result.gameId}, ${result.homeScore}, ${result.awayScore})`,
+  );
+
+  await prisma.$executeRaw`
+    UPDATE "Game" AS g
+    SET
+      "isPlayed" = TRUE,
+      "homeScore" = v.home_score,
+      "awayScore" = v.away_score
+    FROM (
+      VALUES ${Prisma.join(rows)}
+    ) AS v(game_id, home_score, away_score)
+    WHERE g."id" = v.game_id
+  `;
 }
 
 async function buildRatingsMap(games: QuickGame[]): Promise<Map<string, TeamRating>> {
@@ -387,17 +398,7 @@ export async function POST() {
       quickResults.push(simulateQuickGame(game, ratingsMap));
     }
 
-    await runInBatches(quickResults, 12, async (result) => {
-      await prisma.game.update({
-        where: { id: result.gameId },
-        data: {
-          isPlayed: true,
-          homeScore: result.homeScore,
-          awayScore: result.awayScore,
-          playLog: Prisma.JsonNull,
-        },
-      });
-    });
+    await persistQuickResults(quickResults);
 
     const fullResult = simulateGame({
       gameId: nextUserGame.id,
