@@ -7,6 +7,7 @@ import { simulateGame } from "@/lib/simulation/engine";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
+const REGULAR_SEASON_DAYS = 170;
 
 function getMoraleDelta(teamId: string, winnerTeamId: string, loserTeamId: string): number {
   if (teamId === winnerTeamId) {
@@ -24,18 +25,22 @@ async function persistFullGameResult(
   season: number,
   gameId: string,
   result: ReturnType<typeof simulateGame>,
+  trackedTeamId: string,
 ): Promise<void> {
+  const trackedLines = result.playerLines.filter((line) => line.teamId === trackedTeamId);
+  const linesToPersist = trackedLines.length > 0 ? trackedLines : result.playerLines;
+
   await prisma.game.update({
     where: { id: gameId },
     data: {
       isPlayed: true,
       homeScore: result.homeScore,
       awayScore: result.awayScore,
-      playLog: result.playLog,
+      playLog: result.playLog.slice(0, 90),
     },
   });
 
-  const playerRows = result.playerLines.map((line) =>
+  const playerRows = linesToPersist.map((line) =>
     Prisma.sql`(${line.playerId}, ${line.fatigue}, ${getMoraleDelta(
       line.teamId,
       result.winnerTeamId,
@@ -56,7 +61,7 @@ async function persistFullGameResult(
     `;
   }
 
-  const statsRows = result.playerLines.map((line) =>
+  const statsRows = linesToPersist.map((line) =>
     Prisma.sql`(
       ${randomUUID()},
       ${line.playerId},
@@ -120,17 +125,6 @@ async function fastSimulateLeagueGames(
       AND g."id" <> ${excludedGameId}
   `;
 
-  await prisma.$executeRaw`
-    UPDATE "Game"
-    SET "awayScore" = "awayScore" + 1
-    WHERE "season" = ${season}
-      AND "isPlayed" = TRUE
-      AND "day" >= ${fromDay}
-      AND "day" <= ${toDay}
-      AND "id" <> ${excludedGameId}
-      AND "homeScore" = "awayScore"
-  `;
-
   return Number(updatedRows);
 }
 
@@ -139,12 +133,7 @@ async function advanceToDayAfterTarget(
   currentSeason: number,
   targetDay: number,
 ): Promise<{ nextSeason: number; nextDay: number; rolledOver: boolean }> {
-  const maxDayResult = await prisma.game.aggregate({
-    where: { season: currentSeason },
-    _max: { day: true },
-  });
-
-  const maxDay = maxDayResult._max.day ?? targetDay;
+  const maxDay = REGULAR_SEASON_DAYS;
 
   if (targetDay >= maxDay) {
     await rolloverSeason(prisma, currentSeason);
@@ -241,7 +230,12 @@ export async function POST() {
       rngSalt: randomUUID(),
     });
 
-    await persistFullGameResult(leagueState.currentSeason, nextUserGame.id, fullResult);
+    await persistFullGameResult(
+      leagueState.currentSeason,
+      nextUserGame.id,
+      fullResult,
+      userTeamId,
+    );
 
     const advanced = await advanceToDayAfterTarget(
       leagueState.id,
