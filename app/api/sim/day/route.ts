@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { getLeagueStateOrThrow, rolloverSeason } from "@/lib/league/core";
@@ -5,8 +7,9 @@ import { simulateGame } from "@/lib/simulation/engine";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-const DEFAULT_BATCH_SIZE = 2;
-const MAX_BATCH_SIZE = 4;
+
+const DEFAULT_BATCH_SIZE = 1;
+const MAX_BATCH_SIZE = 2;
 
 type SimulatedGame = {
   id: string;
@@ -14,6 +17,13 @@ type SimulatedGame = {
   awayTeam: string;
   homeScore: number;
   awayScore: number;
+};
+
+type SimOutputEntry = {
+  gameId: string;
+  homeTeamName: string;
+  awayTeamName: string;
+  result: ReturnType<typeof simulateGame>;
 };
 
 async function getBatchSize(request: Request): Promise<number> {
@@ -30,16 +40,6 @@ async function getBatchSize(request: Request): Promise<number> {
   }
 }
 
-async function runInBatches(
-  operations: Array<() => Promise<unknown>>,
-  batchSize: number,
-): Promise<void> {
-  for (let index = 0; index < operations.length; index += batchSize) {
-    const chunk = operations.slice(index, index + batchSize);
-    await Promise.all(chunk.map((operation) => operation()));
-  }
-}
-
 async function advanceDayOrSeason(leagueStateId: string, currentSeason: number, currentDay: number) {
   const maxDayResult = await prisma.game.aggregate({
     where: { season: currentSeason },
@@ -49,7 +49,6 @@ async function advanceDayOrSeason(leagueStateId: string, currentSeason: number, 
   const maxDay = maxDayResult._max.day ?? currentDay;
 
   if (currentDay >= maxDay) {
-    // Avoid long interactive transactions on pooled serverless connections.
     await rolloverSeason(prisma, currentSeason);
     await prisma.leagueState.update({
       where: { id: leagueStateId },
@@ -68,6 +67,92 @@ async function advanceDayOrSeason(leagueStateId: string, currentSeason: number, 
   });
 
   return { nextSeason: currentSeason, nextDay: currentDay + 1, rolledOver: false };
+}
+
+function getMoraleDelta(
+  teamId: string,
+  winnerTeamId: string,
+  loserTeamId: string,
+): number {
+  if (teamId === winnerTeamId) {
+    return 1;
+  }
+  if (teamId === loserTeamId) {
+    return -1;
+  }
+  return 0;
+}
+
+async function persistSimResult(season: number, entry: SimOutputEntry): Promise<void> {
+  await prisma.game.update({
+    where: { id: entry.gameId },
+    data: {
+      isPlayed: true,
+      homeScore: entry.result.homeScore,
+      awayScore: entry.result.awayScore,
+      playLog: entry.result.playLog,
+    },
+  });
+
+  const playerRows = entry.result.playerLines.map((line) =>
+    Prisma.sql`(${line.playerId}, ${line.fatigue}, ${getMoraleDelta(
+      line.teamId,
+      entry.result.winnerTeamId,
+      entry.result.loserTeamId,
+    )})`,
+  );
+
+  if (playerRows.length > 0) {
+    await prisma.$executeRaw`
+      UPDATE "Player" AS p
+      SET
+        "fatigue" = v.fatigue,
+        "morale" = LEAST(100, GREATEST(0, p."morale" + v.morale_delta))
+      FROM (
+        VALUES ${Prisma.join(playerRows)}
+      ) AS v(player_id, fatigue, morale_delta)
+      WHERE p."id" = v.player_id
+    `;
+  }
+
+  const statRows = entry.result.playerLines.map((line) =>
+    Prisma.sql`(
+      ${randomUUID()},
+      ${line.playerId},
+      ${season},
+      ${line.minutes > 0 ? 1 : 0},
+      ${line.points},
+      ${line.rebounds},
+      ${line.assists},
+      ${line.minutes},
+      ${line.turnovers}
+    )`,
+  );
+
+  if (statRows.length > 0) {
+    await prisma.$executeRaw`
+      INSERT INTO "PlayerStats" (
+        "id",
+        "playerId",
+        "season",
+        "gamesPlayed",
+        "points",
+        "rebounds",
+        "assists",
+        "minutes",
+        "turnovers"
+      )
+      VALUES ${Prisma.join(statRows)}
+      ON CONFLICT ("playerId", "season")
+      DO UPDATE SET
+        "gamesPlayed" = "PlayerStats"."gamesPlayed" + EXCLUDED."gamesPlayed",
+        "points" = "PlayerStats"."points" + EXCLUDED."points",
+        "rebounds" = "PlayerStats"."rebounds" + EXCLUDED."rebounds",
+        "assists" = "PlayerStats"."assists" + EXCLUDED."assists",
+        "minutes" = "PlayerStats"."minutes" + EXCLUDED."minutes",
+        "turnovers" = "PlayerStats"."turnovers" + EXCLUDED."turnovers"
+    `;
+  }
 }
 
 export async function POST(request: Request) {
@@ -123,14 +208,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const simOutput: Array<{
-      gameId: string;
-      homeTeamId: string;
-      awayTeamId: string;
-      homeTeamName: string;
-      awayTeamName: string;
-      result: ReturnType<typeof simulateGame>;
-    }> = [];
+    const simOutput: SimOutputEntry[] = [];
 
     for (const game of games) {
       const result = simulateGame({
@@ -139,12 +217,11 @@ export async function POST(request: Request) {
         day: game.day,
         home: game.homeTeam,
         away: game.awayTeam,
+        rngSalt: randomUUID(),
       });
 
       simOutput.push({
         gameId: game.id,
-        homeTeamId: game.homeTeamId,
-        awayTeamId: game.awayTeamId,
         homeTeamName: `${game.homeTeam.city} ${game.homeTeam.name}`,
         awayTeamName: `${game.awayTeam.city} ${game.awayTeam.name}`,
         result,
@@ -152,68 +229,7 @@ export async function POST(request: Request) {
     }
 
     for (const entry of simOutput) {
-      await prisma.game.update({
-        where: { id: entry.gameId },
-        data: {
-          isPlayed: true,
-          homeScore: entry.result.homeScore,
-          awayScore: entry.result.awayScore,
-          playLog: entry.result.playLog,
-        },
-      });
-
-      const writeOperations: Array<() => Promise<unknown>> = [];
-
-      for (const line of entry.result.playerLines) {
-        const gamesPlayedIncrement = line.minutes > 0 ? 1 : 0;
-        const moraleDelta =
-          line.teamId === entry.result.winnerTeamId
-            ? 1
-            : line.teamId === entry.result.loserTeamId
-              ? -1
-              : 0;
-
-        writeOperations.push(() =>
-          prisma.player.update({
-            where: { id: line.playerId },
-            data: {
-              fatigue: line.fatigue,
-              morale: { increment: moraleDelta },
-            },
-          }),
-        );
-
-        writeOperations.push(() =>
-          prisma.playerStats.upsert({
-            where: {
-              playerId_season: {
-                playerId: line.playerId,
-                season: leagueState.currentSeason,
-              },
-            },
-            create: {
-              playerId: line.playerId,
-              season: leagueState.currentSeason,
-              gamesPlayed: gamesPlayedIncrement,
-              points: line.points,
-              rebounds: line.rebounds,
-              assists: line.assists,
-              minutes: line.minutes,
-              turnovers: line.turnovers,
-            },
-            update: {
-              gamesPlayed: { increment: gamesPlayedIncrement },
-              points: { increment: line.points },
-              rebounds: { increment: line.rebounds },
-              assists: { increment: line.assists },
-              minutes: { increment: line.minutes },
-              turnovers: { increment: line.turnovers },
-            },
-          }),
-        );
-      }
-
-      await runInBatches(writeOperations, 12);
+      await persistSimResult(leagueState.currentSeason, entry);
     }
 
     const remainingGames = await prisma.game.count({
@@ -247,6 +263,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       simulatedGames,
+      message: dayComplete
+        ? `Day ${leagueState.currentDay} complete.`
+        : `${remainingGames} game${remainingGames === 1 ? "" : "s"} left today.`,
       dayComplete,
       remainingGames,
       ...advanced,

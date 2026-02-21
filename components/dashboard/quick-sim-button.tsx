@@ -23,7 +23,7 @@ type SimResponse = {
 };
 
 const MAX_SIM_REQUESTS = 12;
-const GAMES_PER_REQUEST = 2;
+const GAMES_PER_REQUEST = 1;
 
 function parseSimResponse(rawText: string, status: number): SimResponse {
   try {

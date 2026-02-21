@@ -12,6 +12,7 @@ export type SimulationInput = {
   day: number;
   home: TeamWithRoster;
   away: TeamWithRoster;
+  rngSalt?: string;
 };
 
 export type SimulatedPlayerLine = {
@@ -349,7 +350,8 @@ function buildResult(home: TeamState, away: TeamState): SimulationResult {
 }
 
 export function simulateGame(input: SimulationInput): SimulationResult {
-  const random = createRng(`${input.gameId}-${input.season}-${input.day}`);
+  const salt = input.rngSalt ?? `${Date.now()}-${Math.random()}`;
+  const random = createRng(`${input.gameId}-${input.season}-${input.day}-${salt}`);
   const playLog: string[] = [];
 
   const home = createTeamState(input.home);
