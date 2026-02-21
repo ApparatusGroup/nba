@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { getLeagueStateOrThrow, rolloverSeason } from "@/lib/league/core";
 import { simulateGame } from "@/lib/simulation/engine";
@@ -23,15 +24,14 @@ async function advanceDayOrSeason(leagueStateId: string, currentSeason: number, 
   const maxDay = maxDayResult._max.day ?? currentDay;
 
   if (currentDay >= maxDay) {
-    await prisma.$transaction(async (tx) => {
-      await rolloverSeason(tx, currentSeason);
-      await tx.leagueState.update({
-        where: { id: leagueStateId },
-        data: {
-          currentSeason: currentSeason + 1,
-          currentDay: 1,
-        },
-      });
+    // Avoid long interactive transactions on pooled serverless connections.
+    await rolloverSeason(prisma, currentSeason);
+    await prisma.leagueState.update({
+      where: { id: leagueStateId },
+      data: {
+        currentSeason: currentSeason + 1,
+        currentDay: 1,
+      },
     });
 
     return { nextSeason: currentSeason + 1, nextDay: 1, rolledOver: true };
@@ -122,9 +122,9 @@ export async function POST() {
       });
     }
 
-    await prisma.$transaction(async (tx) => {
-      for (const entry of simOutput) {
-        await tx.game.update({
+    for (const entry of simOutput) {
+      const operations: Prisma.PrismaPromise<unknown>[] = [
+        prisma.game.update({
           where: { id: entry.gameId },
           data: {
             isPlayed: true,
@@ -132,26 +132,30 @@ export async function POST() {
             awayScore: entry.result.awayScore,
             playLog: entry.result.playLog,
           },
-        });
+        }),
+      ];
 
-        for (const line of entry.result.playerLines) {
-          const gamesPlayedIncrement = line.minutes > 0 ? 1 : 0;
-          const moraleDelta =
-            line.teamId === entry.result.winnerTeamId
-              ? 1
-              : line.teamId === entry.result.loserTeamId
-                ? -1
-                : 0;
+      for (const line of entry.result.playerLines) {
+        const gamesPlayedIncrement = line.minutes > 0 ? 1 : 0;
+        const moraleDelta =
+          line.teamId === entry.result.winnerTeamId
+            ? 1
+            : line.teamId === entry.result.loserTeamId
+              ? -1
+              : 0;
 
-          await tx.player.update({
+        operations.push(
+          prisma.player.update({
             where: { id: line.playerId },
             data: {
               fatigue: line.fatigue,
               morale: { increment: moraleDelta },
             },
-          });
+          }),
+        );
 
-          await tx.playerStats.upsert({
+        operations.push(
+          prisma.playerStats.upsert({
             where: {
               playerId_season: {
                 playerId: line.playerId,
@@ -176,10 +180,12 @@ export async function POST() {
               minutes: { increment: line.minutes },
               turnovers: { increment: line.turnovers },
             },
-          });
-        }
+          }),
+        );
       }
-    });
+
+      await prisma.$transaction(operations);
+    }
 
     const advanced = await advanceDayOrSeason(
       leagueState.id,
