@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model LeagueState {
+  id            String   @id @default(uuid())
+  currentSeason Int      @default(2026)
+  currentDay    Int      @default(1)
+  salaryCap     Float    @default(155000000)
+  luxuryTax     Float    @default(188000000)
+  userTeamId    String?
+  userTeam      Team?    @relation("UserTeam", fields: [userTeamId], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Team {
+  id                String        @id @default(uuid())
+  city              String
+  name              String
+  abbrev            String        @unique
+  conference        String
+  division          String
+  pace              Int           @default(50)
+  focus             String        @default("Balanced")
+  players           Player[]
+  homeGames         Game[]        @relation("HomeTeam")
+  awayGames         Game[]        @relation("AwayTeam")
+  controllingLeague LeagueState[] @relation("UserTeam")
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+model Player {
+  id           String        @id @default(uuid())
+  externalId   String?
+  firstName    String
+  lastName     String
+  position     String
+  age          Int
+  height       Int
+  overall      Int
+  potential    Int
+  offense      Int
+  defense      Int
+  playmaking   Int
+  rebounding   Int
+  stamina      Int
+  shotTendency Int
+  touchShare   Int
+  morale       Int           @default(80)
+  fatigue      Int           @default(0)
+  teamId       String?
+  team         Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  contract     Contract?
+  stats        PlayerStats[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([teamId])
+}
+
+model Contract {
+  id        String   @id @default(uuid())
+  playerId  String   @unique
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  amount    Float
+  yearsLeft Int
+  type      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Game {
+  id         String   @id @default(uuid())
+  season     Int
+  day        Int
+  isPlayed   Boolean  @default(false)
+  homeTeamId String
+  homeTeam   Team     @relation("HomeTeam", fields: [homeTeamId], references: [id], onDelete: Restrict)
+  homeScore  Int      @default(0)
+  awayTeamId String
+  awayTeam   Team     @relation("AwayTeam", fields: [awayTeamId], references: [id], onDelete: Restrict)
+  awayScore  Int      @default(0)
+  playLog    Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([season, day, isPlayed])
+  @@index([homeTeamId, awayTeamId])
+}
+
+model PlayerStats {
+  id          String   @id @default(uuid())
+  playerId    String
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  season      Int
+  gamesPlayed Int      @default(0)
+  points      Int      @default(0)
+  rebounds    Int      @default(0)
+  assists     Int      @default(0)
+  minutes     Int      @default(0)
+  turnovers   Int      @default(0)
+
+  @@unique([playerId, season])
+  @@index([season])
+}
