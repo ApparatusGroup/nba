@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 type TradePlayer = {
@@ -16,12 +16,25 @@ type TradeTeam = {
   abbrev: string;
   name: string;
   city: string;
-  players: TradePlayer[];
 };
 
 type TradeMachineProps = {
   userTeamId: string;
   teams: TradeTeam[];
+  userPlayers: TradePlayer[];
+};
+
+type TeamRosterResponse = {
+  id: string;
+  players: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    position: string;
+    overall: number;
+    contract: { amount: number } | null;
+  }>;
+  error?: string;
 };
 
 const money = new Intl.NumberFormat("en-US", {
@@ -30,25 +43,75 @@ const money = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
-export function TradeMachine({ userTeamId, teams }: TradeMachineProps) {
+function normalizeTeamPlayers(data: TeamRosterResponse): TradePlayer[] {
+  return data.players.map((player) => ({
+    id: player.id,
+    name: `${player.firstName} ${player.lastName}`.trim(),
+    position: player.position,
+    overall: player.overall,
+    salary: player.contract?.amount ?? 0,
+  }));
+}
+
+export function TradeMachine({ userTeamId, teams, userPlayers }: TradeMachineProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const userTeam = useMemo(() => teams.find((team) => team.id === userTeamId), [teams, userTeamId]);
   const partnerOptions = useMemo(() => teams.filter((team) => team.id !== userTeamId), [teams, userTeamId]);
 
   const [partnerTeamId, setPartnerTeamId] = useState(partnerOptions[0]?.id ?? "");
+  const [partnerPlayers, setPartnerPlayers] = useState<TradePlayer[]>([]);
+  const [loadingPartnerPlayers, setLoadingPartnerPlayers] = useState(false);
   const [sendPlayerIds, setSendPlayerIds] = useState<string[]>([]);
   const [receivePlayerIds, setReceivePlayerIds] = useState<string[]>([]);
   const [message, setMessage] = useState<string>("");
 
-  const partnerTeam = teams.find((team) => team.id === partnerTeamId);
+  useEffect(() => {
+    if (!partnerTeamId) {
+      setPartnerPlayers([]);
+      return;
+    }
 
-  const outgoingSalary = (userTeam?.players ?? [])
+    const controller = new AbortController();
+
+    const loadPartnerRoster = async () => {
+      setLoadingPartnerPlayers(true);
+      setMessage("");
+      try {
+        const response = await fetch(`/api/team/${partnerTeamId}/roster`, {
+          signal: controller.signal,
+        });
+
+        const raw = (await response.json()) as TeamRosterResponse;
+        if (!response.ok) {
+          setPartnerPlayers([]);
+          setMessage(raw.error ?? "Could not load trade partner roster.");
+          return;
+        }
+
+        setPartnerPlayers(normalizeTeamPlayers(raw));
+      } catch (error) {
+        if ((error as { name?: string }).name !== "AbortError") {
+          setPartnerPlayers([]);
+          setMessage("Could not load trade partner roster.");
+        }
+      } finally {
+        setLoadingPartnerPlayers(false);
+      }
+    };
+
+    loadPartnerRoster();
+
+    return () => {
+      controller.abort();
+    };
+  }, [partnerTeamId]);
+
+  const outgoingSalary = userPlayers
     .filter((player) => sendPlayerIds.includes(player.id))
     .reduce((sum, player) => sum + player.salary, 0);
 
-  const incomingSalary = (partnerTeam?.players ?? [])
+  const incomingSalary = partnerPlayers
     .filter((player) => receivePlayerIds.includes(player.id))
     .reduce((sum, player) => sum + player.salary, 0);
 
@@ -98,10 +161,6 @@ export function TradeMachine({ userTeamId, teams }: TradeMachineProps) {
     });
   };
 
-  if (!userTeam) {
-    return <p className="text-sm text-red-600">User team not found.</p>;
-  }
-
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -130,7 +189,7 @@ export function TradeMachine({ userTeamId, teams }: TradeMachineProps) {
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="mb-2 text-sm font-semibold text-slate-900">You Send (max 3)</h3>
           <div className="space-y-2">
-            {userTeam.players.map((player) => (
+            {userPlayers.map((player) => (
               <button
                 key={player.id}
                 type="button"
@@ -149,8 +208,9 @@ export function TradeMachine({ userTeamId, teams }: TradeMachineProps) {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="mb-2 text-sm font-semibold text-slate-900">You Receive (max 3)</h3>
+          {loadingPartnerPlayers ? <p className="text-xs text-slate-500">Loading roster...</p> : null}
           <div className="space-y-2">
-            {(partnerTeam?.players ?? []).map((player) => (
+            {partnerPlayers.map((player) => (
               <button
                 key={player.id}
                 type="button"
@@ -176,7 +236,7 @@ export function TradeMachine({ userTeamId, teams }: TradeMachineProps) {
         <button
           type="button"
           onClick={submit}
-          disabled={isPending || !sendPlayerIds.length || !receivePlayerIds.length}
+          disabled={isPending || loadingPartnerPlayers || !sendPlayerIds.length || !receivePlayerIds.length}
           className="mt-3 w-full rounded-xl bg-teal-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isPending ? "Processing..." : "Propose Trade"}

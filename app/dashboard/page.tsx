@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
 import { getLeagueStateOrThrow, getTeamPayroll, resolveUserTeamId } from "@/lib/league/core";
-import { getStandings } from "@/lib/league/standings";
 import { QuickSimButton } from "@/components/dashboard/quick-sim-button";
 import { currency, formatRecord } from "@/lib/utils";
 
@@ -11,10 +10,9 @@ export default async function DashboardPage() {
   const leagueState = await getLeagueStateOrThrow();
   const userTeamId = leagueState.userTeamId ?? (await resolveUserTeamId());
 
-  const [team, payroll, standings, nextGame, dayGames] = await Promise.all([
+  const [team, payroll, nextGame, dayGames, homeWins, homeLosses, awayWins, awayLosses] = await Promise.all([
     prisma.team.findUnique({ where: { id: userTeamId } }),
     getTeamPayroll(userTeamId),
-    getStandings(leagueState.currentSeason),
     prisma.game.findFirst({
       where: {
         season: leagueState.currentSeason,
@@ -40,13 +38,54 @@ export default async function DashboardPage() {
       take: 8,
       orderBy: { id: "asc" },
     }),
+    prisma.game.count({
+      where: {
+        season: leagueState.currentSeason,
+        isPlayed: true,
+        homeTeamId: userTeamId,
+        homeScore: {
+          gt: prisma.game.fields.awayScore,
+        },
+      },
+    }),
+    prisma.game.count({
+      where: {
+        season: leagueState.currentSeason,
+        isPlayed: true,
+        homeTeamId: userTeamId,
+        homeScore: {
+          lt: prisma.game.fields.awayScore,
+        },
+      },
+    }),
+    prisma.game.count({
+      where: {
+        season: leagueState.currentSeason,
+        isPlayed: true,
+        awayTeamId: userTeamId,
+        awayScore: {
+          gt: prisma.game.fields.homeScore,
+        },
+      },
+    }),
+    prisma.game.count({
+      where: {
+        season: leagueState.currentSeason,
+        isPlayed: true,
+        awayTeamId: userTeamId,
+        awayScore: {
+          lt: prisma.game.fields.homeScore,
+        },
+      },
+    }),
   ]);
 
   if (!team) {
     return <p className="text-sm text-red-600">No user team found. Seed the database first.</p>;
   }
 
-  const row = standings.find((entry) => entry.teamId === team.id);
+  const wins = homeWins + awayWins;
+  const losses = homeLosses + awayLosses;
   const capSpace = leagueState.salaryCap - payroll;
 
   return (
@@ -61,7 +100,7 @@ export default async function DashboardPage() {
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Record</p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">
-            {row ? formatRecord(row.wins, row.losses) : "0-0"}
+            {formatRecord(wins, losses)}
           </p>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

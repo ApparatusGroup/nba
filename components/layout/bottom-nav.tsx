@@ -24,6 +24,7 @@ export function BottomNav() {
             <li key={item.href}>
               <Link
                 href={item.href}
+                prefetch
                 className={cn(
                   "block rounded-xl px-2 py-2 text-center text-xs font-semibold tracking-wide transition",
                   active

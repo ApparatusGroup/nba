@@ -7,17 +7,32 @@ export const dynamic = "force-dynamic";
 export default async function TradePage() {
   const userTeamId = await resolveUserTeamId();
 
-  const teams = await prisma.team.findMany({
-    include: {
-      players: {
-        include: {
-          contract: true,
+  const [userTeam, teams] = await Promise.all([
+    prisma.team.findUnique({
+      where: { id: userTeamId },
+      include: {
+        players: {
+          include: {
+            contract: true,
+          },
+          orderBy: { overall: "desc" },
         },
-        orderBy: { overall: "desc" },
       },
-    },
-    orderBy: { city: "asc" },
-  });
+    }),
+    prisma.team.findMany({
+      select: {
+        id: true,
+        abbrev: true,
+        city: true,
+        name: true,
+      },
+      orderBy: { city: "asc" },
+    }),
+  ]);
+
+  if (!userTeam) {
+    return <p className="text-sm text-red-600">User team not found.</p>;
+  }
 
   return (
     <div className="space-y-4">
@@ -30,18 +45,18 @@ export default async function TradePage() {
 
       <TradeMachine
         userTeamId={userTeamId}
+        userPlayers={userTeam.players.map((player) => ({
+          id: player.id,
+          name: `${player.firstName} ${player.lastName}`.trim(),
+          position: player.position,
+          overall: player.overall,
+          salary: player.contract?.amount ?? 0,
+        }))}
         teams={teams.map((team) => ({
           id: team.id,
           abbrev: team.abbrev,
           city: team.city,
           name: team.name,
-          players: team.players.map((player) => ({
-            id: player.id,
-            name: `${player.firstName} ${player.lastName}`.trim(),
-            position: player.position,
-            overall: player.overall,
-            salary: player.contract?.amount ?? 0,
-          })),
         }))}
       />
     </div>
