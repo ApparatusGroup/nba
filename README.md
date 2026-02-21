@@ -53,15 +53,17 @@ Mobile-first NBA GM simulator built with Next.js, Prisma, and PostgreSQL.
 2. In Vercel project settings, add env vars:
    - `DATABASE_URL` = Supabase pooler URL (include `pgbouncer=true&connection_limit=1`)
    - `DIRECT_URL` = Supabase direct URL
-3. In Vercel project settings, set Build Command:
+3. Run migrations manually from local/CI (recommended):
+   - `npm run db:migrate:deploy`
+4. In Vercel project settings, set Build Command:
    - `npm run build:vercel`
-4. Seed production data once:
+5. Seed production data once:
    - `npm run db:seed`
-5. Deploy to Vercel:
+6. Deploy to Vercel:
    - `vercel --prod` (CLI) or push to your production branch.
 
 ### Recommended env scoping in Vercel
 
 - Use separate Supabase projects (or databases) for `Preview` and `Production`.
 - Do not point preview deployments at your production database.
-- If you prefer running migrations manually instead of build-time, run `npm run db:migrate:deploy` before deploy and set Build Command back to `npm run build`.
+- This repo defaults to no migrations during Vercel build. Keep schema changes synced by running `npm run db:migrate:deploy` from local/CI when you add migrations.
