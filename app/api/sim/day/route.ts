@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { getLeagueStateOrThrow, rolloverSeason } from "@/lib/league/core";
 import { simulateGame } from "@/lib/simulation/engine";
@@ -123,17 +122,15 @@ export async function POST() {
     }
 
     for (const entry of simOutput) {
-      const operations: Prisma.PrismaPromise<unknown>[] = [
-        prisma.game.update({
-          where: { id: entry.gameId },
-          data: {
-            isPlayed: true,
-            homeScore: entry.result.homeScore,
-            awayScore: entry.result.awayScore,
-            playLog: entry.result.playLog,
-          },
-        }),
-      ];
+      await prisma.game.update({
+        where: { id: entry.gameId },
+        data: {
+          isPlayed: true,
+          homeScore: entry.result.homeScore,
+          awayScore: entry.result.awayScore,
+          playLog: entry.result.playLog,
+        },
+      });
 
       for (const line of entry.result.playerLines) {
         const gamesPlayedIncrement = line.minutes > 0 ? 1 : 0;
@@ -144,47 +141,41 @@ export async function POST() {
               ? -1
               : 0;
 
-        operations.push(
-          prisma.player.update({
-            where: { id: line.playerId },
-            data: {
-              fatigue: line.fatigue,
-              morale: { increment: moraleDelta },
-            },
-          }),
-        );
+        await prisma.player.update({
+          where: { id: line.playerId },
+          data: {
+            fatigue: line.fatigue,
+            morale: { increment: moraleDelta },
+          },
+        });
 
-        operations.push(
-          prisma.playerStats.upsert({
-            where: {
-              playerId_season: {
-                playerId: line.playerId,
-                season: leagueState.currentSeason,
-              },
-            },
-            create: {
+        await prisma.playerStats.upsert({
+          where: {
+            playerId_season: {
               playerId: line.playerId,
               season: leagueState.currentSeason,
-              gamesPlayed: gamesPlayedIncrement,
-              points: line.points,
-              rebounds: line.rebounds,
-              assists: line.assists,
-              minutes: line.minutes,
-              turnovers: line.turnovers,
             },
-            update: {
-              gamesPlayed: { increment: gamesPlayedIncrement },
-              points: { increment: line.points },
-              rebounds: { increment: line.rebounds },
-              assists: { increment: line.assists },
-              minutes: { increment: line.minutes },
-              turnovers: { increment: line.turnovers },
-            },
-          }),
-        );
+          },
+          create: {
+            playerId: line.playerId,
+            season: leagueState.currentSeason,
+            gamesPlayed: gamesPlayedIncrement,
+            points: line.points,
+            rebounds: line.rebounds,
+            assists: line.assists,
+            minutes: line.minutes,
+            turnovers: line.turnovers,
+          },
+          update: {
+            gamesPlayed: { increment: gamesPlayedIncrement },
+            points: { increment: line.points },
+            rebounds: { increment: line.rebounds },
+            assists: { increment: line.assists },
+            minutes: { increment: line.minutes },
+            turnovers: { increment: line.turnovers },
+          },
+        });
       }
-
-      await prisma.$transaction(operations);
     }
 
     const advanced = await advanceDayOrSeason(
